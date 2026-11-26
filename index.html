@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="달력">
+<meta name="theme-color" content="#FDFEFF">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>달력</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* layout idea: one phone-width column; status on top, months flowing in one continuous scroll, a bottom sheet for daily records, two tabs (calendar / numbers) */
+:root{
+  --bg:#EEF1F6; --surface:#FDFEFF; --ink:#2B2A33; --muted:#8A8C99; --line:#E6E9F0;
+  --blood:#E2A3A8; --blood-ink:#6B2833; --blood-soft:#F5E6E6; --blood-mid:#B56B76;
+  --sky:#6E90B0; --sky-soft:#E4EBF2; --sun:#C6A260;
+  --display:"Noto Sans KR","Apple SD Gothic Neo",sans-serif;
+  --body:"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0E1014; --surface:#191B21; --ink:#EEEFF4; --muted:#9698A6; --line:#2C2F38;
+    --blood:#C48C93; --blood-ink:#2C1217; --blood-soft:#3A2B2E; --blood-mid:#DBA5AC;
+    --sky:#8FAECB; --sky-soft:#26323F; --sun:#CFB276;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0E1014; --surface:#191B21; --ink:#EEEFF4; --muted:#9698A6; --line:#2C2F38;
+  --blood:#C48C93; --blood-ink:#2C1217; --blood-soft:#3A2B2E; --blood-mid:#DBA5AC;
+  --sky:#8FAECB; --sky-soft:#26323F; --sun:#CFB276;
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{word-break:keep-all;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;display:flex;justify-content:center}
+button,textarea{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+button:focus-visible,textarea:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
+[hidden]{display:none!important}
+
+.app{position:relative;width:100%;max-width:440px;height:100%;background:var(--surface);display:flex;flex-direction:column;overflow:hidden;overflow:clip}
+@media (min-width:480px){ .app{margin:16px 0;height:calc(100% - 32px);border-radius:28px;border:1px solid var(--line)} }
+
+.top{padding:18px 20px 12px;display:flex;gap:12px;align-items:flex-start}
+.status{flex:1;min-width:0}
+.status h1{font-family:var(--display);font-weight:400;font-size:25px;text-wrap:balance}
+.status h1 b{color:var(--blood-mid);font-weight:400}
+.status p{color:var(--muted);font-size:13px;margin-top:2px}
+.tools{display:flex;gap:6px;flex-shrink:0}
+.pill{border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px;white-space:nowrap}
+.pill[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.note{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 20px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line)}
+.note button{text-decoration:underline;text-underline-offset:3px;color:var(--ink);white-space:nowrap}
+
+.view{flex:1;min-height:0;display:flex;flex-direction:column}
+.wk{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:12px;color:var(--muted);padding:8px 12px 6px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.scroller{flex:1;min-height:0;overflow-y:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.scroller::-webkit-scrollbar{display:none}
+.month{padding:0 12px 10px}
+.mhead{position:sticky;top:0;z-index:1;background:var(--surface);display:flex;align-items:baseline;gap:8px;padding:12px 8px 6px}
+.mhead .m{font-family:var(--display);font-size:22px;line-height:1}
+.mhead .y{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.grid{display:grid;grid-template-columns:repeat(7,1fr)}
+.grid>*{height:74px;border-bottom:1px solid var(--line)}
+.d{display:flex;flex-direction:column;align-items:stretch;padding:8px 0;min-width:0}
+.n{align-self:center;width:26px;height:26px;line-height:26px;text-align:center;border-radius:8px;font-variant-numeric:tabular-nums;font-size:14px}
+.t .n{background:var(--ink);color:var(--surface);font-weight:700}
+.future .n{color:var(--muted)}
+.marks{height:12px;margin-top:2px;display:flex;gap:3px;justify-content:center;align-items:center}
+.band{margin-top:auto;height:16px;line-height:16px;font-size:10.5px;font-weight:500;padding-left:6px;white-space:nowrap;text-align:left}
+.l .band{border-top-left-radius:8px;border-bottom-left-radius:8px;margin-left:3px}
+.r .band{border-top-right-radius:8px;border-bottom-right-radius:8px;margin-right:3px}
+.p .band{background:var(--blood);color:var(--blood-ink)}
+.e .band{background:var(--blood-soft);color:var(--blood-mid)}
+.f .band{background:var(--sky-soft);color:var(--sky)}
+.o .band{background:var(--sky);color:var(--surface);border-radius:8px}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--muted)}
+.dot.sup{background:var(--sun)}
+.heart{width:9px;height:9px;fill:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;padding:8px 20px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.sw{width:14px;height:10px;border-radius:5px}
+.sw.p{background:var(--blood)} .sw.e{background:var(--blood-soft)} .sw.f{background:var(--sky-soft)}
+.sw.o{background:var(--sky)}
+
+/* numbers tab */
+.stats{padding:4px 20px 24px;border-top:1px solid var(--line)}
+.stats h2{font-family:var(--display);font-weight:400;font-size:17px;margin:20px 0 10px}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+.card{border:1px solid var(--line);border-radius:16px;padding:12px 14px}
+.card small{color:var(--muted);font-size:12px;display:block}
+.card strong{font-family:var(--display);font-weight:400;font-size:26px;font-variant-numeric:tabular-nums}
+.card em{font-style:normal;font-size:12px;color:var(--muted);display:block}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+.kv span:first-child{color:var(--muted)}
+.kv b{font-weight:700;text-align:right}
+.kv i{font-style:normal;color:var(--muted);font-weight:400;font-size:12.5px;display:block}
+.avgs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center}
+.avgs div{background:var(--sky-soft);border-radius:12px;padding:8px 4px}
+.avgs small{display:block;font-size:11.5px;color:var(--muted)}
+.avgs b{font-family:var(--display);font-weight:400;font-size:17px;font-variant-numeric:tabular-nums}
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+.tbl th{text-align:left;font-weight:400;color:var(--muted);font-size:12px;padding:6px 0;border-bottom:1px solid var(--line)}
+.tbl td{padding:8px 0;border-bottom:1px solid var(--line);vertical-align:middle}
+.tbl td:last-child{width:46%}
+.bar{display:flex;align-items:center;gap:8px}
+.bar i{height:8px;border-radius:4px;background:var(--blood);flex-shrink:0}
+.bar.out i{background:var(--line)}
+.bar small{color:var(--muted);font-size:11.5px}
+.fine{font-size:12px;color:var(--muted);margin-top:12px}
+
+.tabs{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line)}
+.tabs button{padding:12px 0 14px;font-family:var(--display);font-size:15px;color:var(--muted)}
+.tabs button[aria-selected="true"]{color:var(--ink);box-shadow:inset 0 2px 0 var(--blood-mid)}
+
+/* sheet */
+.veil{position:absolute;inset:0;background:rgba(20,22,32,.34);opacity:0;pointer-events:none;transition:opacity .2s;z-index:5}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-radius:22px 22px 0 0;border-top:1px solid var(--line);padding:18px 20px 20px;transform:translateY(105%);transition:transform .26s cubic-bezier(.2,.8,.2,1);max-height:86%;overflow-y:auto;visibility:hidden;transition:transform .26s cubic-bezier(.2,.8,.2,1),visibility 0s .26s}
+.open .veil{opacity:1;pointer-events:auto}
+.open .sheet{transform:none;visibility:visible;transition:transform .26s cubic-bezier(.2,.8,.2,1)}
+.sheet header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}
+.sheet h2{font-family:var(--display);font-weight:400;font-size:21px}
+.sheet .ctx{color:var(--muted);font-size:13px;margin-top:2px}
+.cats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:6px}
+.cat{border:1px solid var(--line);border-radius:14px;padding:12px 0;font-family:var(--display);font-size:15px}
+.cat.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.cat.on.period{background:var(--blood);color:var(--blood-ink);border-color:var(--blood)}
+.sec{padding:12px 0;border-top:1px solid var(--line)}
+.sec .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.sec .hd b{font-family:var(--display);font-weight:400;font-size:16px}
+.sec .hd button{font-size:12px;color:var(--muted);text-decoration:underline;text-underline-offset:3px}
+.sec h3{font-size:12px;font-weight:400;color:var(--muted);margin:10px 0 6px}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-size:14px}
+.chip.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+textarea{width:100%;margin-top:10px;min-height:64px;resize:vertical;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--surface);font-size:14px}
+textarea::placeholder{color:var(--muted)}
+.ro{font-size:14px} .ro p{margin-top:4px} .ro p span{color:var(--muted)}
+@media (prefers-reduced-motion: reduce){ .sheet,.veil{transition:none} }
+.status h1,.status h1 b,.mhead .m,.stats h2,.card strong,.avgs b,.sheet h2,.sec .hd b{font-weight:700;letter-spacing:-.02em}
+.status h1{font-size:22px} .card strong{font-size:22px} .tabs button{font-weight:500}
+.menu{display:flex;flex-direction:column;gap:8px}
+.item{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:14px;padding:15px 16px;text-align:left}
+.item b{font-weight:700;font-size:16px;flex-shrink:0}
+.item span{flex:1;min-width:0;color:var(--muted);font-size:13px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item i{font-style:normal;color:var(--muted)}
+.sheet header .mid{flex:1;text-align:center}
+.status{display:none}
+.app{padding-top:env(safe-area-inset-top)}
+.tabs{padding-bottom:env(safe-area-inset-bottom)}
+.sheet{padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+.top{justify-content:flex-end;padding:12px 20px 10px}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="top">
+    <div class="status"><h1 id="st1"></h1><p id="st2"></p></div>
+    <div class="tools">
+      <button class="pill" id="btnToday">오늘</button>
+      <button class="pill" id="btnPartner" aria-pressed="false">파트너 화면</button>
+    </div>
+  </div>
+  <div class="note" id="note" hidden></div>
+
+  <div class="view" id="viewCal">
+    <div class="wk"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
+    <div class="scroller" id="scroller" tabindex="0" aria-label="달력. 위아래로 스크롤해 다른 달 보기"></div>
+    <div class="legend">
+      <span><i class="sw p"></i>생리</span><span><i class="sw e"></i>예정</span>
+      <span><i class="sw f"></i>가임기</span><span><i class="sw o"></i>배란 예정</span>
+      <span><svg class="heart" viewBox="0 0 10 10"><path d="M5 9S.5 6.2.5 3.3A2.3 2.3 0 0 1 5 2.4a2.3 2.3 0 0 1 4.5.9C9.5 6.2 5 9 5 9z"/></svg>관계</span>
+      <span><i class="dot sup"></i>영양제</span><span><i class="dot"></i>메모</span>
+    </div>
+  </div>
+  <div class="view" id="viewStats" hidden><div class="scroller"><div class="stats" id="stats"></div></div></div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tabCal" aria-selected="true">달력</button>
+    <button role="tab" id="tabStats" aria-selected="false">주기 수치</button>
+  </div>
+  <div class="veil" id="veil"></div>
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="shTitle"></div>
+</div>
+
+<script>
+(function(){
+"use strict";
+var KEY="cycle-v2", DAY=86400000;
+var FLOWS=["아주 적음","적음","보통","많음"];
+var SYMPTOMS=["복통","두통","요통","피로","붓기","가슴 통증","여드름","식욕 증가","예민함","우울감"];
+var SUPS=["종합비타민","비타민C","비타민D","오메가3","철분"];
+var PROTECT=["콘돔","피임약","질외사정","사후피임약","안 함"];
+var SNOTE=["복통","출혈","통증","기타"];
+var TAGS=["부정출혈","이유 모를 복통","두통","어지러움","분비물 변화"];
+var CATS=[["period","생리"],["sup","영양제"],["sex","성관계"],["memo","메모"]];
+var WD=["일","월","화","수","목","금","토"];
+var HEART='<svg class="heart" viewBox="0 0 10 10"><path d="M5 9S.5 6.2.5 3.3A2.3 2.3 0 0 1 5 2.4a2.3 2.3 0 0 1 4.5.9C9.5 6.2 5 9 5 9z"/></svg>';
+
+function pad(n){return n<10?"0"+n:""+n}
+function key(y,m,d){return y+"-"+pad(m+1)+"-"+pad(d)}
+function parse(k){var a=k.split("-");return Date.UTC(+a[0],+a[1]-1,+a[2])}
+function fmt(ms){var d=new Date(ms);return key(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate())}
+function add(k,n){return fmt(parse(k)+n*DAY)}
+function diff(a,b){return Math.round((parse(a)-parse(b))/DAY)}
+function md(k){var a=k.split("-");return (+a[1])+"월 "+(+a[2])+"일"}
+function ymd(k){return k.replace(/-/g,".")}
+function esc(s){return String(s||"").replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+var now=new Date(), TODAY=key(now.getFullYear(),now.getMonth(),now.getDate());
+
+function sample(){
+  var s={days:{},sample:true}, gaps=[29,28,31,27,30,29,33,28,29,30,27,29,28,30], lens=[5,4,5,6,5], st=add(TODAY,-14), i, j;
+  for(i=0;i<=gaps.length;i++){
+    var n=lens[i%lens.length];
+    for(j=0;j<n;j++) s.days[add(st,j)]={period:true,flow:j===1?"많음":j>=n-1?"적음":"보통"};
+    s.days[st].sym=["복통","피로"];
+    if(i<gaps.length) st=add(st,-gaps[gaps.length-1-i]);
+  }
+  function put(k,o){var r=s.days[k]=s.days[k]||{}; for(var x in o) r[x]=o[x]}
+  put(add(TODAY,-6),{sex:true,protect:"콘돔"}); put(add(TODAY,-24),{sex:true,protect:"콘돔",snote:["복통"]});
+  put(add(TODAY,-3),{sup:["종합비타민","오메가3"]}); put(add(TODAY,-2),{sup:["종합비타민"]});
+  put(add(TODAY,-19),{tags:["부정출혈"],memo:"오후에 소량, 하루 만에 멈춤"});
+  return s;
+}
+var state;
+try{state=JSON.parse(localStorage.getItem(KEY))}catch(e){}
+if(!state||!state.days) state=sample();
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+
+var partner=false, openKey=null, sheetView=null, M={}, S={};
+
+/* ---- 주기 계산 ----
+   1) 생리로 기록한 날을 묶어 한 번의 생리로 본다(중간에 이틀까지 비어도 같은 생리).
+   2) 최근 12번의 주기 중 유난히 길거나 짧은 주기(가운데 값에서 8일 넘게 차이, 또는 15~60일 밖)는 계산에서 뺀다.
+   3) 남은 주기를 최근일수록 더 무겁게 평균 낸다. 흩어진 정도는 예상 범위와 가임기 폭에 반영한다. */
+function wstats(arr){
+  if(!arr.length) return null;
+  var sw=0,sx=0,i,w,n=arr.length;
+  for(i=0;i<n;i++){w=Math.pow(0.85,n-1-i);sw+=w;sx+=w*arr[i]}
+  var mean=sx/sw, sv=0;
+  for(i=0;i<n;i++){w=Math.pow(0.85,n-1-i);sv+=w*(arr[i]-mean)*(arr[i]-mean)}
+  return {mean:mean,sd:Math.sqrt(sv/sw)};
+}
+function median(a){var b=a.slice().sort(function(x,y){return x-y}),h=b.length>>1;return b.length%2?b[h]:(b[h-1]+b[h])/2}
+function compute(){
+  var pd=Object.keys(state.days).filter(function(k){return state.days[k].period}).sort(), eps=[], i, j;
+  pd.forEach(function(k){var e=eps[eps.length-1]; if(e&&diff(k,e.last)<=3) e.last=k; else eps.push({start:k,last:k})});
+  eps.forEach(function(e,idx){e.len=diff(e.last,e.start)+1; if(idx<eps.length-1){e.cycle=diff(eps[idx+1].start,e.start); e.out=e.cycle<15||e.cycle>60}});
+  var withCycle=eps.filter(function(e){return e.cycle&&!e.out}), recent=withCycle.slice(-12);
+  if(recent.length>=4){var med=median(recent.map(function(e){return e.cycle})); recent.forEach(function(e){if(Math.abs(e.cycle-med)>8) e.out=true})}
+  var good=withCycle.filter(function(e){return !e.out}), used=good.slice(-12).map(function(e){return e.cycle});
+  var ws=wstats(used), mean=ws?ws.mean:28, sd=used.length>=3?Math.max(1,ws.sd):3;
+  var lastEp=eps[eps.length-1], ongoing=lastEp&&diff(TODAY,lastEp.last)<=1;
+  var lenArr=eps.filter(function(e){return !(ongoing&&e===lastEp)}).slice(-12).map(function(e){return e.len});
+  var ls=wstats(lenArr), len=ls?Math.max(1,Math.round(ls.mean)):5;
+  var widen=Math.min(3,Math.max(0,Math.round(sd-2)));
+
+  M={};
+  function mark(k,c){(M[k]=M[k]||{})[c]=true}
+  function fertile(nextStart,w){var ov=add(nextStart,-14); for(var q=-5-w;q<=1+w;q++) mark(add(ov,q),"f"); mark(ov,"o")}
+  pd.forEach(function(k){mark(k,"p")});
+  eps.forEach(function(e,idx){if(idx>0&&!eps[idx-1].out) fertile(e.start,0)});
+  var next=null;
+  if(lastEp){
+    if(ongoing) for(j=diff(lastEp.last,lastEp.start)+1;j<len;j++){var k2=add(lastEp.start,j); if(k2>TODAY) mark(k2,"e")}
+    for(i=1;i<=14;i++){var st=add(lastEp.start,Math.round(i*mean)); if(i===1) next=st; for(j=0;j<len;j++) mark(add(st,j),"e"); fertile(st,widen)}
+  }
+  Object.keys(M).forEach(function(k){var m=M[k]; if(m.p){delete m.e;delete m.f;delete m.o} else if(m.e){delete m.f;delete m.o}});
+  function plain(n){var a=good.slice(-n).map(function(e){return e.cycle}); return a.length?a.reduce(function(x,y){return x+y},0)/a.length:null}
+  S={eps:eps,mean:mean,sd:sd,len:len,lenMean:ls?ls.mean:null,next:next,widen:widen,count:good.length,used:used.length,
+     a3:plain(3),a6:plain(6),a12:plain(12),all:plain(999),ongoing:ongoing};
+}
+function cls(k){var m=M[k]; if(!m) return ""; return m.p?"p":m.e?"e":m.f?"f":""}
+function epAt(k){var c=null; S.eps.forEach(function(e){if(e.start<=k) c=e}); return c}
+
+/* ---- 화면 ---- */
+var scroller=document.getElementById("scroller"), app=document.getElementById("app"), sheet=document.getElementById("sheet");
+function renderStatus(){
+  var h=document.getElementById("st1"), p=document.getElementById("st2");
+  if(!S.eps.length){h.textContent="첫 기록을 남겨보세요"; p.textContent="날짜를 눌러 그날 있었던 일을 기록해요"; return}
+  var m=M[TODAY]||{}, cur=epAt(TODAY);
+  if(m.p){h.innerHTML="생리 <b>"+(diff(TODAY,cur.start)+1)+"일째</b>"}
+  else{var n=diff(S.next,TODAY); h.innerHTML=n>0?"다음 생리까지 <b>"+n+"일</b>":n===0?"<b>오늘</b> 생리 예정":"예정일에서 <b>"+(-n)+"일</b> 지남"}
+  p.textContent=md(S.next)+" 예정 · 평균 주기 "+S.mean.toFixed(1)+"일"+(m.o?" · 오늘 배란 예정":m.f?" · 지금 가임기":"");
+}
+function renderNote(){
+  var n=document.getElementById("note");
+  if(partner){n.hidden=false;n.innerHTML="<span>남자친구에게 보이는 화면 미리보기 (보기 전용)</span>"}
+  else if(state.sample){n.hidden=false;n.innerHTML='<span>지금 보이는 건 예시 기록이에요</span><button data-act="clear">지우고 시작하기</button>'}
+  else n.hidden=true;
+}
+function renderCal(){
+  var html="", y0=now.getFullYear(), m0=now.getMonth();
+  for(var off=-42;off<=12;off++){
+    var dt=new Date(y0,m0+off,1), y=dt.getFullYear(), m=dt.getMonth(), first=dt.getDay(), count=new Date(y,m+1,0).getDate();
+    html+='<section class="month" id="m'+y+"-"+m+'"><div class="mhead"><span class="m">'+(m+1)+'월</span><span class="y">'+y+'</span></div><div class="grid">';
+    for(var b=0;b<first;b++) html+="<span></span>";
+    for(var d=1;d<=count;d++){
+      var k=key(y,m,d), c=cls(k), wd=(first+d-1)%7, cl="d";
+      var label="";
+      if(c){cl+=" "+c; var st0=cls(add(k,-1))!==c; if(wd===0||d===1||st0) cl+=" l"; if(wd===6||d===count||cls(add(k,1))!==c) cl+=" r";
+        if(st0||d===1) label=c==="p"?"생리":c==="e"?"예정":"가임기";}
+      if(M[k]&&M[k].o) label="배란";
+      if(M[k]&&M[k].o) cl+=" o";
+      if(k===TODAY) cl+=" t"; if(k>TODAY) cl+=" future";
+      var r=state.days[k], marks="";
+      if(r){ if(r.sex) marks+=HEART; if(r.sup&&r.sup.length) marks+='<i class="dot sup"></i>';
+        if(r.memo||r.pmemo||r.sexMemo||(r.tags&&r.tags.length)||(r.sym&&r.sym.length)) marks+='<i class="dot"></i>'; }
+      html+='<button class="'+cl+'" data-k="'+k+'" aria-label="'+md(k)+'"><span class="n">'+d+'</span><span class="marks">'+marks+'</span><span class="band">'+label+'</span></button>';
+    }
+    for(var t=(first+count)%7;t>0&&t<7;t++) html+="<span></span>";
+    html+="</div></section>";
+  }
+  var keep=scroller.scrollTop; scroller.innerHTML=html; scroller.scrollTop=keep;
+}
+function goToday(smooth){
+  var el=document.getElementById("m"+now.getFullYear()+"-"+now.getMonth()); if(!el) return;
+  scroller.scrollTo({top:el.offsetTop-scroller.offsetTop,behavior:smooth?"smooth":"auto"});
+}
+function f1(x){return x==null?"–":x.toFixed(1)}
+function renderStats(){
+  var el=document.getElementById("stats");
+  if(S.eps.length<2){el.innerHTML='<p class="fine" style="margin-top:20px">생리를 두 번 이상 기록하면 주기 수치가 여기에 나와요.</p>';return}
+  var reg=S.sd<=2?"규칙적":S.sd<=4?"보통":"불규칙", r=Math.max(1,Math.round(S.sd)), ov=add(S.next,-14);
+  var h='<div class="cards">'
+    +'<div class="card"><small>평균 주기</small><strong>'+S.mean.toFixed(1)+'일</strong><em>최근 '+S.used+'회, 최근일수록 더 반영</em></div>'
+    +'<div class="card"><small>주기 변동</small><strong>±'+S.sd.toFixed(1)+'일</strong><em>'+reg+'</em></div>'
+    +'<div class="card"><small>평균 생리 기간</small><strong>'+f1(S.lenMean)+'일</strong><em>첫날부터 마지막 날까지</em></div>'
+    +'<div class="card"><small>기록된 주기</small><strong>'+S.count+'회</strong><em>'+ymd(S.eps[0].start)+'부터</em></div></div>';
+  h+='<h2>다음 예정</h2>'
+    +'<div class="kv"><span>생리 시작</span><b>'+md(S.next)+'<i>'+md(add(S.next,-r))+' ~ '+md(add(S.next,r))+' 사이일 가능성이 커요</i></b></div>'
+    +'<div class="kv"><span>배란 예정</span><b>'+md(ov)+'</b></div>'
+    +'<div class="kv"><span>가임기</span><b>'+md(add(ov,-5-S.widen))+' ~ '+md(add(ov,1+S.widen))+'</b></div>';
+  h+='<h2>기간별 평균 주기</h2><div class="avgs">'
+    +'<div><small>최근 3회</small><b>'+f1(S.a3)+'</b></div><div><small>최근 6회</small><b>'+f1(S.a6)+'</b></div>'
+    +'<div><small>최근 12회</small><b>'+f1(S.a12)+'</b></div><div><small>전체</small><b>'+f1(S.all)+'</b></div></div>';
+  h+='<h2>주기 기록</h2><table class="tbl"><tr><th>시작일</th><th>생리</th><th>주기</th></tr>';
+  S.eps.slice().reverse().forEach(function(e){
+    var cell;
+    if(e.cycle){var w=Math.max(8,Math.min(100,(e.cycle-15)/30*100)); cell='<div class="bar'+(e.out?" out":"")+'"><i style="width:'+w+'%"></i>'+e.cycle+'일'+(e.out?' <small>계산 제외</small>':'')+'</div>'}
+    else cell='<div class="bar"><small>진행 중 · '+(diff(TODAY,e.start)+1)+'일째</small></div>';
+    h+='<tr><td>'+ymd(e.start)+'</td><td>'+e.len+'일</td><td>'+cell+'</td></tr>';
+  });
+  h+='</table><p class="fine">예측은 최근 12번의 주기를 최근일수록 더 무겁게 평균 내서 계산해요. 유난히 길거나 짧았던 주기는 빼고, 주기가 들쭉날쭉할수록 예상 범위와 가임기를 넓게 잡아요. 배란일은 다음 생리 예정일 14일 전으로 추정하며 참고용이에요.</p>';
+  el.innerHTML=h;
+}
+function chips(list,isOn,act){return list.map(function(x){return '<button class="chip'+(isOn(x)?" on":"")+'" data-act="'+act+'" data-v="'+x+'">'+x+"</button>"}).join("")}
+function inList(a){return function(x){return (a||[]).indexOf(x)>=0}}
+function has(r,c){return c==="period"?!!r.period:c==="sup"?!!(r.sup&&r.sup.length):c==="sex"?!!r.sex:!!(r.memo||(r.tags&&r.tags.length))}
+function summary(r,c){
+  var a=c==="period"?[r.flow].concat(r.sym||[],[r.pmemo]):c==="sup"?(r.sup||[]):c==="sex"?[r.protect].concat(r.snote||[],[r.sexMemo]):(r.tags||[]).concat([r.memo]);
+  return a.filter(Boolean).join(", ");
+}
+function norm(r){
+  if(r.flow||(r.sym&&r.sym.length)||r.pmemo) r.period=true; else delete r.period;
+  if(r.protect||(r.snote&&r.snote.length)||r.sexMemo) r.sex=true; else delete r.sex;
+}
+function renderSheet(){
+  var k=openKey; if(!k) return;
+  var r=state.days[k]||{}, m=M[k]||{}, ep=epAt(k), cd=ep?diff(k,ep.start)+1:null, ctx=[], v=sheetView, h;
+  if(cd&&cd<=60) ctx.push("주기 "+cd+"일째");
+  if(m.e) ctx.push("생리 예정"); if(m.o) ctx.push("배란 예정일"); else if(m.f) ctx.push("가임기");
+  var date=md(k)+" "+WD[new Date(parse(k)).getUTCDay()]+"요일";
+  if(v&&!partner&&k<=TODAY){
+    var name=CATS.filter(function(c){return c[0]===v})[0][1];
+    h='<header><button class="pill" data-act="back">‹ 뒤로</button><div class="mid"><h2 id="shTitle">'+name+'</h2><p class="ctx">'+date+'</p></div><button class="pill" data-act="close">완료</button></header>';
+    if(v==="period") h+='<div class="sec"><h3>생리양</h3><div class="row">'+chips(FLOWS,function(x){return r.flow===x},"flow")+'</div>'
+      +'<h3>증상</h3><div class="row">'+chips(SYMPTOMS,inList(r.sym),"sym")+'</div>'
+      +'<textarea id="taP" data-f="pmemo" placeholder="생리 관련 메모">'+esc(r.pmemo)+'</textarea></div>';
+    if(v==="sup") h+='<div class="sec"><div class="row">'+chips(SUPS,inList(r.sup),"sup")+'</div></div>';
+    if(v==="sex") h+='<div class="sec"><h3>피임 방법</h3><div class="row">'+chips(PROTECT,function(x){return r.protect===x},"protect")+'</div>'
+      +'<h3>특이사항 (없으면 비워두기)</h3><div class="row">'+chips(SNOTE,inList(r.snote),"snote")+'</div>'
+      +'<textarea id="taS" data-f="sexMemo" placeholder="특이사항 메모">'+esc(r.sexMemo)+'</textarea></div>';
+    if(v==="memo") h+='<div class="sec"><h3>갑작스러운 증상</h3><div class="row">'+chips(TAGS,inList(r.tags),"tag")+'</div>'
+      +'<textarea id="taM" data-f="memo" placeholder="그 밖에 적어둘 것">'+esc(r.memo)+'</textarea></div>';
+    if(has(r,v)) h+='<div class="sec"><div class="hd"><span></span><button data-act="rm" data-v="'+v+'">이 날의 '+name+' 기록 지우기</button></div></div>';
+  }else{
+    h='<header><div><h2 id="shTitle">'+date+'</h2><p class="ctx">'+(ctx.join(" · ")||"&nbsp;")+'</p></div><button class="pill" data-act="close">완료</button></header>';
+    if(partner){
+      var any=false; h+='<div class="sec ro">';
+      CATS.forEach(function(c){var t=summary(r,c[0]); if(has(r,c[0])){any=true;h+="<p><span>"+c[1]+"</span> "+esc(t||"기록됨")+"</p>"}});
+      if(!any) h+="<p>이 날은 기록이 없어요.</p>";
+      h+="</div>";
+    }else if(k>TODAY){
+      h+='<div class="sec ro">아직 오지 않은 날이에요. 기록은 당일부터 남길 수 있어요.</div>';
+    }else{
+      h+='<div class="menu">'+CATS.map(function(c){return '<button class="item" data-act="go" data-v="'+c[0]+'"><b>'+c[1]+'</b><span>'+esc(summary(r,c[0]))+'</span><i>›</i></button>'}).join("")+"</div>";
+    }
+    if(m.f||m.o) h+='<p class="fine">배란일과 가임기는 추정이에요. 피임 판단에는 쓰지 마세요.</p>';
+  }
+  sheet.innerHTML=h;
+}
+function refresh(){compute();renderStatus();renderNote();renderCal();renderStats();renderSheet()}
+function openSheet(k){openKey=k;sheetView=null;renderSheet();app.classList.add("open")}
+function closeSheet(){
+  if(openKey){var r=state.days[openKey]; if(r&&!Object.keys(r).some(function(x){var v=r[x];return Array.isArray(v)?v.length:v})) delete state.days[openKey]; save()}
+  openKey=null;sheetView=null;app.classList.remove("open");refresh();
+}
+function rec(){ if(state.sample) delete state.sample; return state.days[openKey]=state.days[openKey]||{} }
+function toggle(r,f,v){r[f]=r[f]||[]; var i=r[f].indexOf(v); if(i>=0) r[f].splice(i,1); else r[f].push(v)}
+
+scroller.addEventListener("click",function(e){var b=e.target.closest("[data-k]"); if(b) openSheet(b.dataset.k)});
+document.getElementById("veil").addEventListener("click",closeSheet);
+document.addEventListener("keydown",function(e){if(e.key==="Escape"&&openKey) closeSheet()});
+document.getElementById("btnToday").addEventListener("click",function(){setTab("cal");goToday(true)});
+document.getElementById("btnPartner").addEventListener("click",function(){partner=!partner;this.setAttribute("aria-pressed",partner);if(openKey) closeSheet(); else refresh()});
+document.getElementById("note").addEventListener("click",function(e){ if(e.target.dataset.act==="clear"){state={days:{}};save();refresh()} });
+function setTab(t){
+  document.getElementById("viewCal").hidden=t!=="cal"; document.getElementById("viewStats").hidden=t!=="stats";
+  document.getElementById("tabCal").setAttribute("aria-selected",t==="cal"); document.getElementById("tabStats").setAttribute("aria-selected",t==="stats");
+}
+document.getElementById("tabCal").addEventListener("click",function(){setTab("cal")});
+document.getElementById("tabStats").addEventListener("click",function(){setTab("stats")});
+sheet.addEventListener("input",function(e){var f=e.target.dataset.f; if(f){var r=rec(); r[f]=e.target.value; norm(r); save()}});
+sheet.addEventListener("click",function(e){
+  var b=e.target.closest("[data-act]"); if(!b) return;
+  var a=b.dataset.act, v=b.dataset.v, r;
+  if(a==="close"){closeSheet();return}
+  if(a==="go"||a==="back"){sheetView=a==="go"?v:null; renderSheet(); sheet.scrollTop=0; return}
+  r=rec();
+  if(a==="rm"){ if(v==="period"){delete r.flow;delete r.sym;delete r.pmemo} else if(v==="sex"){delete r.protect;delete r.snote;delete r.sexMemo} else if(v==="sup"){delete r.sup} else {delete r.tags;delete r.memo} }
+  else if(a==="flow") r.flow=r.flow===v?null:v;
+  else if(a==="protect") r.protect=r.protect===v?null:v;
+  else if(a==="sym") toggle(r,"sym",v);
+  else if(a==="sup") toggle(r,"sup",v);
+  else if(a==="snote") toggle(r,"snote",v);
+  else if(a==="tag") toggle(r,"tags",v);
+  norm(r); save();
+  var top=sheet.scrollTop; refresh(); sheet.scrollTop=top;
+});
+
+refresh();goToday(false);
+if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function(){});
+})();
+</script>
+</body>
+</html>
